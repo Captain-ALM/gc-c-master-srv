@@ -1,7 +1,9 @@
 package main
 
 import (
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 	"golang.local/gc-c-db/db"
 	"golang.local/master-srv/conf"
 	"gopkg.in/yaml.v3"
