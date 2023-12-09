@@ -1,0 +1,15 @@
+# Master Server Service (Dev)
+[Unit]
+Description=Master Server Service (Dev)
+
+[Service]
+WorkingDirectory=/etc/mastersrv_
+ExecStart=/usr/local/bin/mastersrv_
+User=root
+Group=root
+Type=simple
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
