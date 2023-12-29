@@ -1,17 +1,26 @@
 package main
 
 import (
+	"crypto/rsa"
+	"encoding/base64"
+	"fmt"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.local/gc-c-db/db"
 	"golang.local/master-srv/conf"
+	"golang.local/master-srv/monitor"
+	"golang.local/master-srv/web"
 	"gopkg.in/yaml.v3"
 	"log"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -72,7 +81,7 @@ func main() {
 	}
 
 	//DB Connection:
-	manager := db.Manager{Path: configYml.DBPath}
+	manager := &db.Manager{Path: configYml.DBPath}
 	err = manager.Connect()
 	if err != nil {
 		log.Fatalln("Failed to open DB connection:", err)
@@ -90,11 +99,70 @@ func main() {
 		log.Fatalln("Failed to assure DB schema:", err)
 	}
 
+	//Load keys:
+	prvkb, err := base64.StdEncoding.DecodeString(configYml.Identity.PrivateKey)
+	if err != nil {
+		log.Fatal("Failed to decode private key:", err)
+	}
+	prvk, err := jwt.ParseRSAPrivateKeyFromPEM(prvkb)
+	if err != nil {
+		log.Fatal("Failed to decode private key:", err)
+	}
+	var pubk *rsa.PublicKey
+	if configYml.Identity.PublicKey == "" {
+		pubk = &prvk.PublicKey
+	} else {
+		var pubkb []byte
+		pubkb, err = base64.StdEncoding.DecodeString(configYml.Identity.PublicKey)
+		if err != nil {
+			log.Fatal("Failed to decode public key:", err)
+		}
+		pubk, err = jwt.ParseRSAPublicKeyFromPEM(pubkb)
+		if err != nil {
+			log.Fatal("Failed to decode public key:", err)
+		}
+	}
+	runtime.KeepAlive(pubk) //TODO: Rem this
+
 	//Server definitions:
+	log.Println("[Main] Starting up Monitor service...")
+	monService := monitor.NewMonitor(configYml, manager, prvk)
+	monService.Start()
+	log.Printf("[Main] Starting up HTTP server on %s...\n", configYml.Listen.Web)
+	webServer := web.New(configYml, monService)
+
+	//Safe Shutdown
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	//Startup complete:
 	z := time.Now().Sub(y)
 	log.Printf("[Main] Took '%s' to fully initialize modules\n", z.String())
+
+	go func() {
+		<-sigs
+		fmt.Printf("\n")
+
+		log.Printf("[Main] Attempting safe shutdown\n")
+		a := time.Now()
+
+		log.Printf("[Main] Shutting down HTTP server...\n")
+		err := webServer.Close()
+		if err != nil {
+			log.Println(err)
+		}
+
+		log.Printf("[Main] Stopping Monitor Service...\n")
+		monService.Stop()
+
+		log.Printf("[Main] Signalling program exit...\n")
+		b := time.Now().Sub(a)
+		log.Printf("[Main] Took '%s' to fully shutdown modules\n", b.String())
+		wg.Done()
+	}()
+
+	wg.Wait()
+	log.Println("[Main] Goodbye")
 }
 
 func check(err error) {
