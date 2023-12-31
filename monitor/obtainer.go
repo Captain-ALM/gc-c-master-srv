@@ -30,14 +30,14 @@ type Obtainer struct {
 	cnf                  conf.GCPYaml
 }
 
-func (o *Obtainer) Obtain() ([]*MonitoredClient, error) {
+func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 	if o.clientInstanceGroup == nil || o.clientBackendService == nil || o.clientURLMaps == nil {
 		return nil, errors.New("a compute api client is nil")
 	}
 	if !o.active {
 		return nil, errors.New("obtainer not active")
 	}
-	var toRet []*MonitoredClient
+	toRet := make(map[uint32]*MonitoredClient)
 	ctx, cancel := context.WithTimeout(context.Background(), o.cnf.GetAPITimeout())
 	urlMapReq := &computepb.GetUrlMapRequest{
 		Project: o.cnf.ProjectID,
@@ -109,14 +109,14 @@ func (o *Obtainer) Obtain() ([]*MonitoredClient, error) {
 				continue
 			}
 			cInstanceName := cInstanceSplt[len(cInstanceSplt)-1]
-			toRet = append(toRet, &MonitoredClient{
+			toRet[uint32(cPathID)] = &MonitoredClient{
 				InstanceName:       cInstanceName,
 				InstanceGroupName:  cIGroupName,
 				BackendServiceName: cBackendName,
 				Metadata: tables.Server{
 					ID: uint32(cPathID),
 				},
-			})
+			}
 		}
 	}
 	return toRet, nil

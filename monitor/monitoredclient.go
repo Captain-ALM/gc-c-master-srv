@@ -26,32 +26,50 @@ type MonitoredClient struct {
 
 func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) error {
 	err := dbMan.Load(&m.Metadata)
-	if err != nil { //TODO: May need removing later
+	if err.Error() == db.TableRecordNonExistent {
+		m.Metadata.Address = cnf.GCP.GetAppBasePrefix() + "/" + strconv.Itoa(int(m.Metadata.ID))
+		m.Metadata.LastCheckTime = time.Now()
+		err = dbMan.Save(&m.Metadata)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
 	m.client = &transport.Client{}
 	m.client.SetTimeout(cnf.Balancer.GetCheckTimeout())
 	m.client.SetKeepAlive(cnf.Balancer.GetCheckInterval())
-	wsa, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + cnf.GCP.GetAppBasePrefix() + "/" + strconv.Itoa(int(m.Metadata.ID)) + "/ws")
+	bsURL, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address)
 	if err != nil {
 		return err
 	}
-	rsa, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + cnf.GCP.GetAppBasePrefix() + "/" + strconv.Itoa(int(m.Metadata.ID)) + "/rs")
-	if err != nil {
-		return err
-	}
-	m.client.Activate(wsa.String(), rsa.String())
+	m.client.Activate(bsURL.String()+"/ws", bsURL.String()+"/rs")
 	go func() {
 		for m.client.IsActive() {
 			pk, err := m.client.Receive()
 			if err == nil {
 				switch pk.GetCommand() {
 				case packets.ID:
-					m.idRecv = true
+					var pyl packets.IDPayload
+					err = pk.GetPayload(&pyl)
+					if err != nil {
+						_ = m.client.Close()
+					} else {
+						if pyl.ID == m.Metadata.ID {
+							m.idRecv = true
+						} else {
+							_ = m.client.Close()
+						}
+					}
 				case packets.CurrentStatus:
-					_ = pk.GetPayload(&m.LastLoad)
-					m.Metadata.LastCheckTime = time.Now()
-					_ = dbMan.Save(&m.Metadata)
+					if !m.idRecv {
+						continue
+					}
+					err = pk.GetPayload(&m.LastLoad)
+					if err == nil {
+						m.Metadata.LastCheckTime = time.Now()
+						_ = dbMan.Save(&m.Metadata)
+					}
 				case packets.Halt:
 					_ = m.client.Close()
 				}
@@ -59,7 +77,7 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 		}
 	}()
 	if m.client.IsActive() {
-		return m.client.Send(packet.FromNew(packets.NewID(int(m.Metadata.ID), prvk)))
+		return m.client.Send(packet.FromNew(packets.NewID(m.Metadata.ID, prvk)))
 	}
 	return nil
 }

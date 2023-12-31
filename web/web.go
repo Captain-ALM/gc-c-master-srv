@@ -5,12 +5,15 @@ import (
 	"golang.local/master-srv/conf"
 	"log"
 	"net/http"
+	"strconv"
 )
 
-func New(yaml conf.ConfigYaml, assignUnit http.Handler) *http.Server {
+func New(yaml conf.ConfigYaml, assignUnit http.Handler, pubkStr string) *http.Server {
 	router := mux.NewRouter()
+	pkSrv := &PubKeySrv{pubkStr, strconv.Itoa(len(pubkStr))}
 	for _, d := range yaml.Listen.Domains {
-		router.Host(d).PathPrefix(yaml.Listen.GetBasePrefixURL()).Handler(assignUnit)
+		router.Host(d).Path(yaml.Listen.GetBasePrefixURL() + "pubkey").Handler(pkSrv)
+		router.Host(d).Path(yaml.Listen.GetBasePrefixURL() + "connect").Handler(assignUnit)
 		router.Host(d).PathPrefix("/").HandlerFunc(pageNotFound)
 	}
 	router.PathPrefix("/").HandlerFunc(domainNotAllowed)

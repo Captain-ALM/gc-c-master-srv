@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/rsa"
 	"golang.local/gc-c-db/db"
+	"golang.local/gc-c-db/tables"
 	"golang.local/master-srv/conf"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -32,7 +34,7 @@ func NewMonitor(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) *M
 type Monitor struct {
 	active     bool
 	client     *compute.InstancesClient
-	clients    []*MonitoredClient
+	clients    map[uint32]*MonitoredClient
 	privateKey *rsa.PrivateKey
 	dbManager  *db.Manager
 	cnf        conf.ConfigYaml
@@ -40,7 +42,53 @@ type Monitor struct {
 }
 
 func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Cache-Control", "max-age=0, no-cache, no-store, must-revalidate")
+	writer.Header().Set("Pragma", "no-cache")
+	if request.Method == http.MethodGet {
+		if request.URL.Query().Has("i") {
+			gid, err := strconv.Atoi(request.URL.Query().Get("i"))
+			if err == nil && gid > 0 {
+				theGame := tables.Game{ID: uint32(gid)}
+				err := m.dbManager.Load(&theGame)
+				if err == nil && theGame.ServerID > 0 {
+					theCl, has := m.clients[theGame.ServerID]
+					if has {
+						writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+						writer.Header().Set("Content-Length", strconv.Itoa(len(theCl.Metadata.Address)))
+						writer.WriteHeader(http.StatusOK)
+						_, _ = writer.Write([]byte(theCl.Metadata.Address))
+						return
+					}
+				}
+			}
+		}
+		var lowestLoadCl *MonitoredClient
+		for _, mcl := range m.clients {
+			if mcl.LastLoad.Current >= mcl.LastLoad.Max {
+				continue
+			}
+			if mcl.Metadata.LastCheckTime.Before(time.Now().Add(-(m.cnf.Balancer.GetCheckInterval() + m.cnf.Balancer.GetCheckTimeout()))) {
+				continue
+			}
+			if lowestLoadCl == nil || mcl.LastLoad.Max-mcl.LastLoad.Current > lowestLoadCl.LastLoad.Max-lowestLoadCl.LastLoad.Current {
+				lowestLoadCl = mcl
+			}
+		}
+		if lowestLoadCl == nil {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		writer.Header().Set("Content-Length", strconv.Itoa(len(lowestLoadCl.Metadata.Address)))
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(lowestLoadCl.Metadata.Address))
+	} else if request.Method == http.MethodOptions {
+		writer.Header().Set("Allow", http.MethodOptions+", "+http.MethodGet)
+		writer.WriteHeader(http.StatusOK)
+	} else {
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (m *Monitor) Start() {
@@ -68,11 +116,11 @@ func (m *Monitor) Start() {
 		}()
 		for m.active {
 			go func() {
-				<-time.After(m.cnf.Balancer.CheckInterval)
+				<-time.After(m.cnf.Balancer.GetCheckInterval())
 				tOutChan <- true
 			}()
 			for _, cc := range m.clients {
-				cc.Monitor(m.cnf.Balancer.CheckInterval)
+				cc.Monitor(m.cnf.Balancer.GetCheckInterval())
 			}
 			select {
 			case <-m.byeChan:
