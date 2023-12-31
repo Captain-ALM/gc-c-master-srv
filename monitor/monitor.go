@@ -46,6 +46,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "max-age=0, no-cache, no-store, must-revalidate")
 	writer.Header().Set("Pragma", "no-cache")
 	if request.Method == http.MethodGet {
+		kaDuration := -(m.cnf.Balancer.GetCheckInterval() + m.cnf.Balancer.GetCheckTimeout())
 		if request.URL.Query().Has("i") {
 			gid, err := strconv.Atoi(request.URL.Query().Get("i"))
 			if err == nil && gid > 0 {
@@ -53,22 +54,33 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 				err := m.dbManager.Load(&theGame)
 				if err == nil && theGame.ServerID > 0 {
 					theCl, has := m.clients[theGame.ServerID]
-					if has {
+					if has && theCl.HasIDShaked() &&
+						theCl.LastLoad.Current < theCl.LastLoad.Max &&
+						!theCl.Metadata.LastCheckTime.Before(time.Now().Add(kaDuration)) {
 						writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 						writer.Header().Set("Content-Length", strconv.Itoa(len(theCl.Metadata.Address)))
 						writer.WriteHeader(http.StatusOK)
 						_, _ = writer.Write([]byte(theCl.Metadata.Address))
-						return
+					} else {
+						if has && !theCl.IsActive() {
+							go func() { _ = theCl.Activate(m.cnf, m.dbManager, m.privateKey) }()
+						}
+						writer.WriteHeader(http.StatusNotFound)
 					}
+				} else {
+					writer.WriteHeader(http.StatusNotFound)
 				}
+				return
 			}
 		}
 		var lowestLoadCl *MonitoredClient
 		for _, mcl := range m.clients {
-			if mcl.LastLoad.Current >= mcl.LastLoad.Max {
-				continue
-			}
-			if mcl.Metadata.LastCheckTime.Before(time.Now().Add(-(m.cnf.Balancer.GetCheckInterval() + m.cnf.Balancer.GetCheckTimeout()))) {
+			if !mcl.HasIDShaked() ||
+				mcl.LastLoad.Current >= mcl.LastLoad.Max ||
+				mcl.Metadata.LastCheckTime.Before(time.Now().Add(kaDuration)) {
+				if !mcl.IsActive() {
+					go func() { _ = mcl.Activate(m.cnf, m.dbManager, m.privateKey) }()
+				}
 				continue
 			}
 			if lowestLoadCl == nil || mcl.LastLoad.Max-mcl.LastLoad.Current > lowestLoadCl.LastLoad.Max-lowestLoadCl.LastLoad.Current {
@@ -131,11 +143,11 @@ func (m *Monitor) Start() {
 	}()
 	for _, cc := range m.clients {
 		err = cc.Activate(m.cnf, m.dbManager, m.privateKey)
-		if err != nil {
+		/*if err != nil {
 			log.Println("[Monitor]", err.Error())
 			_ = obt.Close()
 			return
-		}
+		}*/
 	}
 }
 

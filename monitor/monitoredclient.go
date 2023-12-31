@@ -45,6 +45,7 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	}
 	m.client.Activate(bsURL.String()+"/ws", bsURL.String()+"/rs")
 	go func() {
+		defer func() { m.idRecv = false }()
 		for m.client.IsActive() {
 			pk, err := m.client.Receive()
 			if err == nil {
@@ -100,5 +101,14 @@ func (m *MonitoredClient) Close() error {
 	if m.client == nil {
 		return errors.New("monitored client internal client is nil")
 	}
-	return m.client.Close()
+	err := m.client.Close()
+	m.idRecv = false
+	return err
+}
+
+func (m *MonitoredClient) HasIDShaked() bool {
+	if m == nil {
+		return false
+	}
+	return m.idRecv
 }
