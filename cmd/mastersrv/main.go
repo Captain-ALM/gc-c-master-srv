@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.local/gc-c-db/db"
+	"golang.local/gc-c-db/tables"
 	"golang.local/master-srv/conf"
 	"golang.local/master-srv/monitor"
 	"golang.local/master-srv/web"
@@ -91,6 +92,14 @@ func main() {
 		err = manager.DropAllTables()
 		if err != nil {
 			log.Fatalln("Failed to reset DB:", err)
+		}
+	}
+
+	if os.Getenv("INVALIDATE_SESSIONS") == "1" {
+		userTblE := tables.User{TokenHash: nil}
+		_, err = manager.Engine.Nullable(userTblE.GetNullableColumns()...).Cols(userTblE.GetNullableColumns()...).Update(&userTblE)
+		if err != nil {
+			log.Fatalln("Failed to reset Invalidate Sessions:", err)
 		}
 	}
 
