@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,7 @@ func NewMonitor(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) *M
 		cnf:        cnf,
 		privateKey: prvk,
 		dbManager:  dbMan,
+		closeMutex: &sync.Mutex{},
 	}
 }
 
@@ -39,6 +41,7 @@ type Monitor struct {
 	dbManager  *db.Manager
 	cnf        conf.ConfigYaml
 	byeChan    chan bool
+	closeMutex *sync.Mutex
 }
 
 func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -120,16 +123,21 @@ func (m *Monitor) Start() {
 	go func() {
 		tOutChan := make(chan bool, 1)
 		defer func() {
-			close(tOutChan)
-			close(m.byeChan)
+			//close(tOutChan)
 			for _, cc := range m.clients {
 				_ = cc.Close()
 			}
 		}()
 		for m.active {
 			go func() {
-				<-time.After(m.cnf.Balancer.GetCheckInterval())
-				tOutChan <- true
+				select {
+				case <-m.byeChan:
+				case <-time.After(m.cnf.Balancer.GetCheckInterval()):
+					select {
+					case <-m.byeChan:
+					case tOutChan <- true:
+					}
+				}
 			}()
 			for _, cc := range m.clients {
 				cc.Monitor(m.cnf.Balancer.GetCheckInterval())
@@ -156,9 +164,11 @@ func (m *Monitor) IsActive() bool {
 }
 
 func (m *Monitor) Stop() {
+	m.closeMutex.Lock()
+	defer m.closeMutex.Unlock()
 	if m.active {
 		m.active = false
-		m.byeChan <- true
+		close(m.byeChan)
 		if m.client != nil {
 			_ = m.client.Close()
 		}
