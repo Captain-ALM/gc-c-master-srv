@@ -66,6 +66,7 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 		for m.client.IsActive() {
 			pk, err := m.client.Receive()
 			if err == nil {
+				DebugPrintln("PK_CMD: " + pk.GetCommand())
 				switch pk.GetCommand() {
 				case packets.ID:
 					var pyl packets.IDPayload
