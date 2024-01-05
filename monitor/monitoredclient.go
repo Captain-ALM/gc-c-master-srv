@@ -10,6 +10,7 @@ import (
 	"golang.local/gc-c-db/tables"
 	"golang.local/master-srv/conf"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 )
@@ -47,7 +48,13 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	if err != nil {
 		return err
 	}
-	m.client.Activate(bsURL.String()+"/ws", bsURL.String()+"/rs")
+	if os.Getenv("DEBUG_WS") == "1" {
+		m.client.Activate(bsURL.String()+"/ws", "")
+	} else if os.Getenv("DEBUG_RS") == "1" {
+		m.client.Activate("", bsURL.String()+"/rs")
+	} else {
+		m.client.Activate(bsURL.String()+"/ws", bsURL.String()+"/rs")
+	}
 	go func() {
 		defer func() { m.idRecv = false }()
 		for m.client.IsActive() {
