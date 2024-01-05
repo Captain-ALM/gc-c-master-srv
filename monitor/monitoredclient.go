@@ -40,7 +40,8 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	m.client.SetTimeout(cnf.Balancer.GetCheckTimeout())
 	m.client.SetKeepAlive(cnf.Balancer.GetCheckInterval())
 	m.client.SetOnClose(func(t transport.Transport, e error) {
-		DebugPrintln("Closed : " + e.Error() + " : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + m.Metadata.Address)
+		DebugPrintln("Closed : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + m.Metadata.Address)
+		DebugErrIsNil(e)
 	})
 	bsURL, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address)
 	if err != nil {
