@@ -141,7 +141,9 @@ func (m *Monitor) Start() {
 				}
 			}()
 			for _, cc := range m.clients {
-				cc.Monitor(m.cnf.Balancer.GetCheckInterval())
+				if cc.IsActive() && cc.HasIDShaked() {
+					cc.Monitor()
+				}
 			}
 			select {
 			case <-m.byeChan:

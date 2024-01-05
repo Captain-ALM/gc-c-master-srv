@@ -103,8 +103,8 @@ func (m *MonitoredClient) IsActive() bool {
 	return m.client.IsActive()
 }
 
-func (m *MonitoredClient) Monitor(checkInterval time.Duration) {
-	if m.client == nil || time.Now().Add(checkInterval).Before(m.Metadata.LastCheckTime.Add(checkInterval)) {
+func (m *MonitoredClient) Monitor() {
+	if m.client == nil {
 		return
 	}
 	_ = m.client.Send(packet.FromNew(packets.NewQueryStatus(nil)))
