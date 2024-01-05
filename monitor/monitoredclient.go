@@ -44,16 +44,22 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 		DebugPrintln("Closed : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + m.Metadata.Address)
 		DebugErrIsNil(e)
 	})
-	bsURL, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address)
+	bsRestURL, err := url.Parse(cnf.GCP.GetAppRestScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address + "/rs")
 	if err != nil {
 		return err
 	}
+	DebugPrintln("Client RS URL : " + bsRestURL.String())
+	bsWSURL, err := url.Parse(cnf.GCP.GetAppWSScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address + "/ws")
+	if err != nil {
+		return err
+	}
+	DebugPrintln("Client WS URL : " + bsWSURL.String())
 	if os.Getenv("DEBUG_WS") == "1" {
-		m.client.Activate(bsURL.String()+"/ws", "")
+		m.client.Activate(bsWSURL.String(), "")
 	} else if os.Getenv("DEBUG_RS") == "1" {
-		m.client.Activate("", bsURL.String()+"/rs")
+		m.client.Activate("", bsRestURL.String())
 	} else {
-		m.client.Activate(bsURL.String()+"/ws", bsURL.String()+"/rs")
+		m.client.Activate(bsWSURL.String(), bsRestURL.String())
 	}
 	go func() {
 		defer func() { m.idRecv = false }()
@@ -91,7 +97,7 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	if m.client.IsActive() {
 		return m.client.Send(packet.FromNew(packets.NewID(m.Metadata.ID, prvk)))
 	} else {
-		DebugPrintln("Client Failed to Activate : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + bsURL.String())
+		DebugPrintln("Activate Failed : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + m.Metadata.Address)
 	}
 	return nil
 }

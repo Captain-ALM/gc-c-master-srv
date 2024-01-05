@@ -6,7 +6,8 @@ import (
 )
 
 type GCPYaml struct {
-	AppScheme            string        `yaml:"appScheme"`
+	AppRestScheme        string        `yaml:"appRestScheme"`
+	AppWSScheme          string        `yaml:"appWSScheme"`
 	AppHost              string        `yaml:"host"`
 	AppBasePrefix        string        `yaml:"appBasePrefix"`
 	ProjectID            string        `yaml:"projectID"`
@@ -17,11 +18,18 @@ type GCPYaml struct {
 	APITimeout           time.Duration `yaml:"apiTimeout"`
 }
 
-func (gy GCPYaml) GetAppScheme() string {
-	if gy.AppScheme == "" {
+func (gy GCPYaml) GetAppRestScheme() string {
+	if gy.AppRestScheme == "" {
 		return "http"
 	}
-	return gy.AppScheme
+	return gy.AppRestScheme
+}
+
+func (gy GCPYaml) GetAppWSScheme() string {
+	if gy.AppWSScheme == "" {
+		return "ws"
+	}
+	return gy.AppWSScheme
 }
 
 func (gy GCPYaml) GetAppHost(cnf ConfigYaml) string {

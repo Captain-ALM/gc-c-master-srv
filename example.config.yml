@@ -38,7 +38,8 @@ balancer:
   checkInterval: 5s
   checkTimeout: 15s
 GCP:
-  appScheme: "http"
+  appRestScheme: "http"
+  appWSScheme: "ws"
   host: "localhost"
   appBasePrefix: "/servers/app"
   projectID: "tactile-bolt-402216"
