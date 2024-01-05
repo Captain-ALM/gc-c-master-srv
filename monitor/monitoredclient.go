@@ -39,6 +39,9 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	m.client = &transport.Client{}
 	m.client.SetTimeout(cnf.Balancer.GetCheckTimeout())
 	m.client.SetKeepAlive(cnf.Balancer.GetCheckInterval())
+	m.client.SetOnClose(func(t transport.Transport, e error) {
+		DebugPrintln("Closed : " + e.Error() + " : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + m.Metadata.Address)
+	})
 	bsURL, err := url.Parse(cnf.GCP.GetAppScheme() + "://" + cnf.GCP.GetAppHost(cnf) + m.Metadata.Address)
 	if err != nil {
 		return err
@@ -79,6 +82,8 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 	}()
 	if m.client.IsActive() {
 		return m.client.Send(packet.FromNew(packets.NewID(m.Metadata.ID, prvk)))
+	} else {
+		DebugPrintln("Client Failed to Activate : " + strconv.Itoa(int(m.Metadata.ID)) + " : " + bsURL.String())
 	}
 	return nil
 }

@@ -67,7 +67,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 						_, _ = writer.Write([]byte(theCl.Metadata.Address))
 					} else {
 						if has && !theCl.IsActive() {
-							go func() { _ = theCl.Activate(m.cnf, m.dbManager, m.privateKey) }()
+							go DebugErrIsNil(theCl.Activate(m.cnf, m.dbManager, m.privateKey))
 						}
 						writer.WriteHeader(http.StatusNotFound)
 					}
@@ -83,7 +83,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 				mcl.LastLoad.Current >= mcl.LastLoad.Max ||
 				mcl.Metadata.LastCheckTime.Before(time.Now().Add(kaDuration)) {
 				if !mcl.IsActive() {
-					go func() { _ = mcl.Activate(m.cnf, m.dbManager, m.privateKey) }()
+					go DebugErrIsNil(mcl.Activate(m.cnf, m.dbManager, m.privateKey))
 				}
 				continue
 			}
@@ -174,10 +174,6 @@ func (m *Monitor) Stop() {
 			_ = m.client.Close()
 		}
 	}
-}
-
-func InDebugMode() bool {
-	return os.Getenv("DEBUG") == "1"
 }
 
 func DebugPrintln(msg string) {

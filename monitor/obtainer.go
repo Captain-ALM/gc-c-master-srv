@@ -55,7 +55,7 @@ func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 				continue
 			}
 			cPath := cPaths[0]
-			DebugPrintln("DEBUG: PATH :" + cPath)
+			DebugPrintln("PATH : " + cPath)
 			if !strings.HasSuffix(cPath, "/*") {
 				continue
 			}
@@ -72,7 +72,7 @@ func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 				continue
 			}
 			cBackendName := cBackendSplt[len(cBackendSplt)-1]
-			DebugPrintln("DEBUG: BackEndNAME :" + cBackendName)
+			DebugPrintln("BackEndNAME : " + cBackendName)
 			backendSrvReq := &computepb.GetBackendServiceRequest{
 				BackendService: cBackendName,
 				Project:        o.cnf.ProjectID,
@@ -92,7 +92,7 @@ func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 				continue
 			}
 			cIGroupName := cIGroupSplt[len(cIGroupSplt)-1]
-			DebugPrintln("DEBUG: InstanceGroupNAME :" + cIGroupName)
+			DebugPrintln("InstanceGroupNAME : " + cIGroupName)
 			if slices.Contains(o.cnf.NonAppInstanceGroups, cIGroupName) {
 				continue
 			}
@@ -114,7 +114,7 @@ func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 				continue
 			}
 			cInstanceName := cInstanceSplt[len(cInstanceSplt)-1]
-			DebugPrintln("DEBUG: InstanceNAME :" + cInstanceName)
+			DebugPrintln("InstanceNAME : " + cInstanceName)
 			toRet[uint32(cPathID)] = &MonitoredClient{
 				InstanceName:       cInstanceName,
 				InstanceGroupName:  cIGroupName,
