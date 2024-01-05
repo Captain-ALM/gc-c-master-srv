@@ -87,7 +87,7 @@ func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk 
 					err = pk.GetPayload(&m.LastLoad)
 					if err == nil {
 						m.Metadata.LastCheckTime = time.Now()
-						_ = dbMan.Save(&m.Metadata)
+						DebugErrIsNil(dbMan.Save(&m.Metadata))
 					}
 				case packets.Halt:
 					_ = m.client.Close()
