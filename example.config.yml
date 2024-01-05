@@ -1,0 +1,50 @@
+listen:
+  web: ":18080"
+  readTimeout: 2h
+  writeTimeout: 2h
+  domains:
+    - "127.0.0.1:18080"
+    - "::1:18080"
+    - "localhost:18080"
+  basePrefixURL: "/"
+DBPath: "mysql:root:root@tcp(localhost:3306)/GCloud_City?charset=utf8"
+identity:
+  publicKey: |
+    -----BEGIN PUBLIC KEY-----
+    MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2HIHXskzaIslAUtkgxzqNGhyS
+    zwJcryaVsvThwyZRAF70vwts60UhofbAtu6am1DwwMl0k43IcHd9Cdyds0COYFOj
+    LwQQiBsTxXPFg9/GcNVjvy2zcIRGB9kjvIH6+9SeezjzHFwMivDg4avEuXAyFjO6
+    Ue/hj0LtT8x2dm2vPwIDAQAB
+    -----END PUBLIC KEY-----
+  privateKey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIICXQIBAAKBgQC2HIHXskzaIslAUtkgxzqNGhySzwJcryaVsvThwyZRAF70vwts
+    60UhofbAtu6am1DwwMl0k43IcHd9Cdyds0COYFOjLwQQiBsTxXPFg9/GcNVjvy2z
+    cIRGB9kjvIH6+9SeezjzHFwMivDg4avEuXAyFjO6Ue/hj0LtT8x2dm2vPwIDAQAB
+    AoGBAItw1obXMntQaXLEPRcZFZ8XIEvVEATx5AR564G2UG9zbkHOyqvSlbOD9ZFo
+    QNjHFjnSFC8cEFMqsoNeeruRllpjaZ5PguCKprrEUnR/gKCMX++uzL73gdhXuWeR
+    iP+5GOmBxmvYp4gaPL+6WYeGp7qQ1vXOw9l1+icn5JkP4LWBAkEA3YLuAAaWa/Fb
+    JecgRxsETYkJlnbp/V/T6UCGenduWFZ7gEsvaJFdlMlEJFgXFdq2/eSYa5P3v+yc
+    K3lbNDxEQQJBANJ3KCf4L7oa4462lLqiCXzneWRX+JTf6Z1qm2/hdIiNqvAIQjb/
+    AYk/e4Xh0VvmpnMyASTw9/+HOYQ23Am3E38CQDEmskTTMWF2RrFcXa8pcYT62WPH
+    sxgDwXPKW4ylH5j+Z50KEdT0HH29Qx+FZGn3BA/GP4Pva1Ps3qJO5Uvr64ECQQCc
+    qJE9XyG3d3hWrFT8rsw9KtdS96BSwHDV+ZqFpt3lHv5T+PHAmgP8s0Iwn6wEqiTP
+    rjLn2m3eyDrpzSPwH1PlAkB40SUooCOecepmUQSZ4TUI8L0heqL9SeTLZgRFw6mO
+    OoCKXkM4EvGnFbP86o6ItsNBWrf07HMyCYyNda80BOlM
+    -----END RSA PRIVATE KEY-----
+balancer:
+  maxLoadBeforeActivate: 0.85
+  minLoadBeforeDeactivate: 0.05
+  checkInterval: 5s
+  checkTimeout: 15s
+GCP:
+  appScheme: "http"
+  host: "localhost"
+  appBasePrefix: "/servers/app"
+  projectID: "tactile-bolt-402216"
+  zone: "us-central1-a"
+  urlMap: "lb-decidequiz"
+  nonAppInstanceGroups:
+    - "instance-group-first"
+  serviceEmail: "master-controller@tactile-bolt-402216.iam.gserviceaccount.com"
+  apiTimeout: 60s

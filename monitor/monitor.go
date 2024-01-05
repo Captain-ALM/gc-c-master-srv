@@ -9,6 +9,7 @@ import (
 	"golang.local/master-srv/conf"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -55,7 +56,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			if err == nil && gid > 0 {
 				theGame := tables.Game{ID: uint32(gid)}
 				err := m.dbManager.Load(&theGame)
-				if err == nil && theGame.ServerID > 0 {
+				if DebugErrIsNil(err) && theGame.ServerID > 0 {
 					theCl, has := m.clients[theGame.ServerID]
 					if has && theCl.HasIDShaked() &&
 						theCl.LastLoad.Current < theCl.LastLoad.Max &&
@@ -173,4 +174,22 @@ func (m *Monitor) Stop() {
 			_ = m.client.Close()
 		}
 	}
+}
+
+func InDebugMode() bool {
+	return os.Getenv("DEBUG") == "1"
+}
+
+func DebugPrintln(msg string) {
+	if os.Getenv("DEBUG") == "1" {
+		log.Println("DEBUG:", msg)
+	}
+}
+
+func DebugErrIsNil(err error) bool {
+	if err == nil {
+		return true
+	}
+	DebugPrintln(err.Error())
+	return false
 }
