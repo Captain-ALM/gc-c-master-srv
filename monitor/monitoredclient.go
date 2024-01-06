@@ -27,7 +27,7 @@ type MonitoredClient struct {
 
 func (m *MonitoredClient) Activate(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) error {
 	err := dbMan.Load(&m.Metadata)
-	if err.Error() == db.TableRecordNonExistent {
+	if err != nil && err.Error() == db.TableRecordNonExistent {
 		m.Metadata.Address = cnf.GCP.GetAppBasePrefix() + "/" + strconv.Itoa(int(m.Metadata.ID))
 		m.Metadata.LastCheckTime = time.Now()
 		err = dbMan.Save(&m.Metadata)
