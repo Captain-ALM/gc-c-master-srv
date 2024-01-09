@@ -1,13 +1,12 @@
 package monitor
 
 import (
-	compute "cloud.google.com/go/compute/apiv1"
-	"context"
 	"crypto/rsa"
 	"golang.local/gc-c-db/db"
 	"golang.local/gc-c-db/tables"
 	"golang.local/master-srv/conf"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -25,8 +24,8 @@ func stripError[t any](v t, e error) t {
 }
 
 func NewMonitor(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) *Monitor {
+	rand.Seed(time.Now().UnixNano())
 	return &Monitor{
-		client:     stripError(compute.NewInstancesRESTClient(context.Background())),
 		cnf:        cnf,
 		privateKey: prvk,
 		dbManager:  dbMan,
@@ -36,7 +35,6 @@ func NewMonitor(cnf conf.ConfigYaml, dbMan *db.Manager, prvk *rsa.PrivateKey) *M
 
 type Monitor struct {
 	active     bool
-	client     *compute.InstancesClient
 	clients    map[uint32]*MonitoredClient
 	privateKey *rsa.PrivateKey
 	dbManager  *db.Manager
@@ -67,7 +65,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 						_, _ = writer.Write([]byte(theCl.Metadata.Address))
 					} else {
 						if has && !theCl.IsActive() {
-							go DebugErrIsNil(theCl.Activate(m.cnf, m.dbManager, m.privateKey))
+							go m.activateMC(theCl)
 						}
 						writer.WriteHeader(http.StatusNotFound)
 					}
@@ -77,19 +75,29 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 				return
 			}
 		}
+		var posbReactive []*MonitoredClient
+		maxedCnt := 0
+		activeCnt := 0
 		var lowestLoadCl *MonitoredClient
 		for _, mcl := range m.clients {
 			if !mcl.HasIDShaked() ||
 				mcl.LastLoad.Current >= mcl.LastLoad.Max ||
 				mcl.Metadata.LastCheckTime.Before(time.Now().Add(kaDuration)) {
 				if !mcl.IsActive() {
-					go DebugErrIsNil(mcl.Activate(m.cnf, m.dbManager, m.privateKey))
+					posbReactive = append(posbReactive, mcl)
 				}
 				continue
+			}
+			activeCnt++
+			if m.cnf.Balancer.IsHighLoad(int(mcl.LastLoad.Current), int(mcl.LastLoad.Max)) {
+				maxedCnt++
 			}
 			if lowestLoadCl == nil || mcl.LastLoad.Max-mcl.LastLoad.Current > lowestLoadCl.LastLoad.Max-lowestLoadCl.LastLoad.Current {
 				lowestLoadCl = mcl
 			}
+		}
+		if maxedCnt == activeCnt {
+			m.activateMC(posbReactive[rand.Intn(len(posbReactive))])
 		}
 		if lowestLoadCl == nil {
 			writer.WriteHeader(http.StatusServiceUnavailable)
@@ -129,6 +137,9 @@ func (m *Monitor) Start() {
 				_ = cc.Close()
 			}
 		}()
+		var mined []*MonitoredClient
+		activeCnt := 0
+		maxCnt := 0
 		for m.active {
 			go func() {
 				select {
@@ -140,9 +151,32 @@ func (m *Monitor) Start() {
 					}
 				}
 			}()
+			activeCnt = 0
+			maxCnt = 0
+			mined = nil
 			for _, cc := range m.clients {
-				if cc.IsActive() && cc.HasIDShaked() {
-					cc.Monitor()
+				if cc.IsActive() {
+					if cc.HasIDShaked() {
+						cc.Monitor()
+					}
+					activeCnt++
+					if m.cnf.Balancer.IsHighLoad(int(cc.LastLoad.Current), int(cc.LastLoad.Max)) {
+						maxCnt++
+					} else if m.cnf.Balancer.IsLowLoad(int(cc.LastLoad.Current), int(cc.LastLoad.Max)) {
+						mined = append(mined, cc)
+					}
+				}
+			}
+			if maxCnt == 0 {
+				mIdx := 0
+				for activeCnt > 1 && mIdx < len(mined) {
+					_ = mined[mIdx].Close()
+					select {
+					case mined[mIdx].IGManChan <- false:
+					default:
+					}
+					activeCnt--
+					mIdx++
 				}
 			}
 			select {
@@ -153,12 +187,18 @@ func (m *Monitor) Start() {
 		}
 	}()
 	for _, cc := range m.clients {
-		err = cc.Activate(m.cnf, m.dbManager, m.privateKey)
-		/*if err != nil {
-			log.Println("[Monitor]", err.Error())
-			_ = obt.Close()
-			return
-		}*/
+		go cc.ClientManPump(&m.active, m.byeChan, m.cnf)
+		m.activateMC(cc)
+	}
+}
+
+func (m *Monitor) activateMC(mc *MonitoredClient) {
+	DebugErrIsNil(mc.Activate(m.cnf, m.dbManager, m.privateKey))
+	if !mc.IsActive() {
+		select {
+		case mc.IGManChan <- true:
+		default:
+		}
 	}
 }
 
@@ -172,9 +212,6 @@ func (m *Monitor) Stop() {
 	if m.active {
 		m.active = false
 		close(m.byeChan)
-		if m.client != nil {
-			_ = m.client.Close()
-		}
 	}
 }
 

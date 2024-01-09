@@ -16,6 +16,8 @@ type GCPYaml struct {
 	NonAppInstanceGroups []string      `yaml:"nonAppInstanceGroups"`
 	ServiceEmail         string        `yaml:"serviceEmail"`
 	APITimeout           time.Duration `yaml:"apiTimeout"`
+	APIActionTimeout     time.Duration `yaml:"apiActionTimeout"`
+	APIActionCooldown    time.Duration `yaml:"apiActionCooldown"`
 }
 
 func (gy GCPYaml) GetAppRestScheme() string {
@@ -51,5 +53,21 @@ func (gy GCPYaml) GetAPITimeout() time.Duration {
 		return 1 * time.Second
 	} else {
 		return gy.APITimeout
+	}
+}
+
+func (gy GCPYaml) GetAPIActionTimeout() time.Duration {
+	if gy.APIActionTimeout < 1 {
+		return 1 * time.Second
+	} else {
+		return gy.APIActionTimeout
+	}
+}
+
+func (gy GCPYaml) GetAPIActionCooldown() time.Duration {
+	if gy.APIActionCooldown < 1 {
+		return 50 * time.Millisecond
+	} else {
+		return gy.APIActionCooldown
 	}
 }

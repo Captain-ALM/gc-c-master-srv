@@ -49,3 +49,5 @@ GCP:
     - "instance-group-first"
   serviceEmail: "master-controller@tactile-bolt-402216.iam.gserviceaccount.com"
   apiTimeout: 60s
+  apiActionTimeout: 60s
+  apiActionCooldown: 15s

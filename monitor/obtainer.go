@@ -122,6 +122,8 @@ func (o *Obtainer) Obtain() (map[uint32]*MonitoredClient, error) {
 				Metadata: tables.Server{
 					ID: uint32(cPathID),
 				},
+				IGManChan:       make(chan bool),
+				InstancesClient: stripError(compute.NewInstancesRESTClient(context.Background())),
 			}
 		}
 	}

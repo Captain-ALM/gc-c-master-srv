@@ -1,6 +1,9 @@
 package monitor
 
 import (
+	compute "cloud.google.com/go/compute/apiv1"
+	"cloud.google.com/go/compute/apiv1/computepb"
+	"context"
 	"crypto/rsa"
 	"errors"
 	"golang.local/gc-c-com/packet"
@@ -19,6 +22,8 @@ type MonitoredClient struct {
 	InstanceName       string
 	InstanceGroupName  string
 	BackendServiceName string
+	IGManChan          chan bool
+	InstancesClient    *compute.InstancesClient
 	idRecv             bool
 	client             *transport.Client
 	Metadata           tables.Server
@@ -121,6 +126,12 @@ func (m *MonitoredClient) Close() error {
 	if m.client == nil {
 		return errors.New("monitored client internal client is nil")
 	}
+	if m.InstancesClient == nil {
+		return errors.New("gcp instance client is nil")
+	}
+	if os.Getenv("DISABLE_HALT_SEND") != "1" {
+		_ = m.client.Send(packet.FromNew(packets.NewHalt(nil)))
+	}
 	err := m.client.Close()
 	m.idRecv = false
 	return err
@@ -131,4 +142,104 @@ func (m *MonitoredClient) HasIDShaked() bool {
 		return false
 	}
 	return m.idRecv
+}
+
+func (m *MonitoredClient) ClientManPump(isActive *bool, byeChan chan bool, cnf conf.ConfigYaml) {
+	defer func() { _ = m.InstancesClient.Close() }()
+	for *isActive {
+		select {
+		case <-byeChan:
+			return
+		case cst := <-m.IGManChan:
+			ctx, cancel := context.WithTimeout(context.Background(), cnf.GCP.GetAPITimeout())
+			instanceReq := &computepb.GetInstanceRequest{
+				Instance: m.InstanceName,
+				Project:  cnf.GCP.ProjectID,
+				Zone:     cnf.GCP.Zone,
+			}
+			instanceRsp, err := m.InstancesClient.Get(ctx, instanceReq)
+			cancel()
+			if !DebugErrIsNil(err) || instanceRsp.Status == nil {
+				continue
+			}
+			iStat, ok := computepb.Instance_Status_value[*instanceRsp.Status]
+			if ok {
+				if cst {
+					switch computepb.Instance_Status(iStat) {
+					case computepb.Instance_RUNNING:
+						if os.Getenv("NO_FORCE_RESET") != "1" {
+							ctx, cancel := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+							resetReq := &computepb.ResetInstanceRequest{
+								Instance: m.InstanceName,
+								Project:  cnf.GCP.ProjectID,
+								Zone:     cnf.GCP.Zone,
+							}
+							resetOp, err := m.InstancesClient.Reset(ctx, resetReq)
+							if !DebugErrIsNil(err) {
+								cancel()
+								continue
+							}
+							ctx2, cancel2 := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+							err = resetOp.Wait(ctx2)
+							cancel()
+							cancel2()
+							DebugErrIsNil(err)
+						}
+					case computepb.Instance_STOPPED:
+						ctx, cancel := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+						startReq := &computepb.StartInstanceRequest{
+							Instance: m.InstanceName,
+							Project:  cnf.GCP.ProjectID,
+							Zone:     cnf.GCP.Zone,
+						}
+						startOp, err := m.InstancesClient.Start(ctx, startReq)
+						if !DebugErrIsNil(err) {
+							cancel()
+							continue
+						}
+						ctx2, cancel2 := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+						err = startOp.Wait(ctx2)
+						cancel()
+						cancel2()
+						DebugErrIsNil(err)
+					case computepb.Instance_SUSPENDED:
+						ctx, cancel := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+						resumeReq := &computepb.ResumeInstanceRequest{
+							Instance: m.InstanceName,
+							Project:  cnf.GCP.ProjectID,
+							Zone:     cnf.GCP.Zone,
+						}
+						resumeOp, err := m.InstancesClient.Resume(ctx, resumeReq)
+						if !DebugErrIsNil(err) {
+							cancel()
+							continue
+						}
+						ctx2, cancel2 := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+						err = resumeOp.Wait(ctx2)
+						cancel()
+						cancel2()
+						DebugErrIsNil(err)
+					}
+				} else if computepb.Instance_Status(iStat) == computepb.Instance_RUNNING {
+					ctx, cancel := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+					stopReq := &computepb.StopInstanceRequest{
+						Instance: m.InstanceName,
+						Project:  cnf.GCP.ProjectID,
+						Zone:     cnf.GCP.Zone,
+					}
+					stopOp, err := m.InstancesClient.Stop(ctx, stopReq)
+					if !DebugErrIsNil(err) {
+						cancel()
+						continue
+					}
+					ctx2, cancel2 := context.WithTimeout(context.Background(), cnf.GCP.GetAPIActionTimeout())
+					err = stopOp.Wait(ctx2)
+					cancel()
+					cancel2()
+					DebugErrIsNil(err)
+				}
+			}
+			time.Sleep(cnf.GCP.GetAPIActionCooldown())
+		}
+	}
 }
