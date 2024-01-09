@@ -96,7 +96,7 @@ func (m *Monitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 				lowestLoadCl = mcl
 			}
 		}
-		if maxedCnt == activeCnt {
+		if maxedCnt == activeCnt && len(posbReactive) > 0 {
 			m.activateMC(posbReactive[rand.Intn(len(posbReactive))])
 		}
 		if lowestLoadCl == nil {
