@@ -21,6 +21,9 @@ func (by BalancerYaml) GetMaxLoad() float64 {
 }
 
 func (by BalancerYaml) IsHighLoad(current int, max int) bool {
+	if max <= 0 {
+		return true
+	}
 	return float64(current)/float64(max) > by.GetMaxLoad()
 }
 
@@ -36,6 +39,9 @@ func (by BalancerYaml) GetMinLoad() float64 {
 }
 
 func (by BalancerYaml) IsLowLoad(current int, max int) bool {
+	if max <= 0 {
+		return true
+	}
 	return float64(current)/float64(max) < by.GetMinLoad()
 }
 
